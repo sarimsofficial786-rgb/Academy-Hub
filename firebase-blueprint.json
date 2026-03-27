@@ -1,0 +1,172 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Represents an Admin or Teacher in the system.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "name": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "phone": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "teacher", "student"] },
+        "status": { "type": "string", "enum": ["active", "inactive"] },
+        "assignedClassIds": { "type": "array", "items": { "type": "string" } },
+        "permissions": {
+          "type": "object",
+          "properties": {
+            "viewDashboard": { "type": "boolean" },
+            "viewStudents": { "type": "boolean" },
+            "addStudents": { "type": "boolean" },
+            "editStudents": { "type": "boolean" },
+            "deleteStudents": { "type": "boolean" },
+            "viewClasses": { "type": "boolean" },
+            "manageClasses": { "type": "boolean" },
+            "markTodayAttendance": { "type": "boolean" },
+            "editTodayAttendance": { "type": "boolean" },
+            "viewAttendanceHistory": { "type": "boolean" },
+            "managePastAttendance": { "type": "boolean" },
+            "useUnifiedMode": { "type": "boolean" },
+            "manageFees": { "type": "boolean" },
+            "viewReports": { "type": "boolean" },
+            "exportReports": { "type": "boolean" },
+            "manageTeachers": { "type": "boolean" },
+            "createStudentLogin": { "type": "boolean" },
+            "manageOffDays": { "type": "boolean" },
+            "manageFinance": { "type": "boolean" },
+            "manageTimetable": { "type": "boolean" }
+          }
+        }
+      },
+      "required": ["uid", "name", "email", "role", "status"]
+    },
+    "Student": {
+      "title": "Student",
+      "description": "Represents a student in the academy.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "rollNumber": { "type": "string" },
+        "classId": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "left", "completed"] },
+        "joinedAt": { "type": "string", "format": "date-time" },
+        "uid": { "type": "string", "description": "Optional: Student's own login UID" }
+      },
+      "required": ["name", "rollNumber", "classId", "status"]
+    },
+    "Class": {
+      "title": "Class",
+      "description": "Represents a class.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "subjects": { "type": "array", "items": { "type": "string" } },
+        "subjectTeacherMap": { "type": "object", "description": "Mapping of subject names to teacher UIDs" },
+        "timing": { "type": "string" },
+        "monthlyFee": { "type": "number" },
+        "offDays": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["name", "timing", "monthlyFee"]
+    },
+    "Attendance": {
+      "title": "Attendance",
+      "description": "Master attendance record for a class on a specific date.",
+      "type": "object",
+      "properties": {
+        "classId": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "markedBy": { "type": "string", "description": "UID of the user who marked it" },
+        "markedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["classId", "date", "markedBy"]
+    },
+    "AttendanceRecord": {
+      "title": "AttendanceRecord",
+      "description": "Individual student's attendance status.",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string" },
+        "status": { "type": "string", "enum": ["present", "absent", "leave"] },
+        "date": { "type": "string", "format": "date" },
+        "classId": { "type": "string" },
+        "subject": { "type": "string" },
+        "teacherId": { "type": "string" }
+      },
+      "required": ["studentId", "status", "date", "classId", "subject"]
+    },
+    "Fee": {
+      "title": "Fee",
+      "description": "Represents a fee payment for a student.",
+      "type": "object",
+      "properties": {
+        "studentId": { "type": "string" },
+        "month": { "type": "string", "description": "Format: YYYY-MM" },
+        "totalAmount": { "type": "number" },
+        "paidAmount": { "type": "number" },
+        "remaining": { "type": "number" },
+        "status": { "type": "string", "enum": ["paid", "unpaid", "partial"] },
+        "lastPaymentAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["studentId", "month", "totalAmount", "paidAmount", "status"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "System audit logs.",
+      "type": "object",
+      "properties": {
+        "action": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "details": { "type": "string" }
+      },
+      "required": ["action", "userId", "timestamp"]
+    },
+    "Expense": {
+      "title": "Expense",
+      "description": "Represents an academy expense (rent, salary, bills, etc.).",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string", "description": "e.g., Rent, Electricity, Staff Salary" },
+        "amount": { "type": "number" },
+        "category": { "type": "string", "enum": ["rent", "salary", "utility", "maintenance", "other"] },
+        "date": { "type": "string", "format": "date" },
+        "month": { "type": "string", "description": "Format: YYYY-MM" },
+        "description": { "type": "string" },
+        "paidTo": { "type": "string", "description": "Name of the person or entity paid" }
+      },
+      "required": ["title", "amount", "category", "date", "month"]
+    },
+    "TimetableSlot": {
+      "title": "TimetableSlot",
+      "description": "Represents a single lecture slot in the timetable.",
+      "type": "object",
+      "properties": {
+        "classId": { "type": "string" },
+        "subject": { "type": "string" },
+        "teacherUid": { "type": "string" },
+        "day": { "type": "string", "enum": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] },
+        "startTime": { "type": "string", "description": "HH:mm format" },
+        "endTime": { "type": "string", "description": "HH:mm format" },
+        "room": { "type": "string" }
+      },
+      "required": ["classId", "subject", "teacherUid", "day", "startTime", "endTime"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": { "schema": "User", "description": "Admin and Teacher profiles" },
+    "/students/{studentId}": { "schema": "Student", "description": "Student records" },
+    "/classes/{classId}": { "schema": "Class", "description": "Class definitions" },
+    "/attendance/{attendanceId}": { "schema": "Attendance", "description": "Attendance master records" },
+    "/attendance_records/{recordId}": { "schema": "AttendanceRecord", "description": "Individual attendance status" },
+    "/fees/{feeId}": { "schema": "Fee", "description": "Fee payment records" },
+    "/audit_logs/{logId}": { "schema": "AuditLog", "description": "System audit logs" },
+    "/expenses/{expenseId}": { "schema": "Expense", "description": "Academy expense records" },
+    "/timetable/{slotId}": { "schema": "TimetableSlot", "description": "Timetable lecture slots" }
+  }
+}

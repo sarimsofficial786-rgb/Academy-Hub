@@ -1,0 +1,260 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Super admin access
+    match /{allPaths=**} {
+      allow read, write: if request.auth != null && (
+        request.auth.token.email == "sarimsofficial786@gmail.com"
+      );
+    }
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Fields:
+    //   - uid: string (required)
+    //   - name: string (required)
+    //   - email: string (required, email format)
+    //   - phone: string (optional)
+    //   - role: string (required, 'admin'|'teacher'|'student')
+    //   - status: string (required, 'active'|'inactive')
+    //   - assignedClassIds: list (optional)
+    //   - permissions: map (optional)
+    //   - joinedAt: string (optional, ISO 8601)
+    //
+    // Collection: students
+    // Fields:
+    //   - name: string (required)
+    //   - rollNumber: string (required)
+    //   - classId: string (required)
+    //   - status: string (required, 'active'|'left'|'completed')
+    //   - email: string (optional)
+    //   - phone: string (optional)
+    //   - joinedAt: string (required)
+    //   - uid: string (optional)
+    //
+    // Collection: classes
+    // Fields:
+    //   - name: string (required)
+    //   - timing: string (required)
+    //   - monthlyFee: number (required)
+    //   - subjects: list (optional)
+    //   - offDays: list (optional)
+    //   - emergencyOnDates: list (optional)
+    //   - emergencyOffDates: list (optional)
+    //
+    // Collection: attendance
+    // Fields:
+    //   - classId: string (required)
+    //   - date: string (required, YYYY-MM-DD)
+    //   - markedBy: string (required, UID)
+    //   - markedAt: string (required, ISO 8601)
+    //
+    // Collection: attendance_records
+    // Fields:
+    //   - studentId: string (required)
+    //   - status: string (required, 'present'|'absent'|'leave')
+    //   - date: string (required, YYYY-MM-DD)
+    //   - classId: string (required)
+    //
+    // Collection: fees
+    // Fields:
+    //   - studentId: string (required)
+    //   - month: string (required, YYYY-MM)
+    //   - totalAmount: number (required)
+    //   - paidAmount: number (required)
+    //   - remaining: number (required)
+    //   - status: string (required, 'paid'|'unpaid'|'partial')
+    //
+    // Collection: expenses
+    // Fields:
+    //   - title: string (required)
+    //   - amount: number (required)
+    //   - category: string (required)
+    //   - date: string (required, YYYY-MM-DD)
+    //   - month: string (required, YYYY-MM)
+    //
+    // ===============================================================
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.email == "sarimsofficial786@gmail.com" ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
+    }
+
+    function isTeacher() {
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'teacher';
+    }
+
+    function isStudent() {
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'student';
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function hasPermission(perm) {
+      return isAuthenticated() && (
+        isAdmin() || 
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.permissions[perm] == true)
+      );
+    }
+
+    function isAssignedToClass(classId) {
+      return isAuthenticated() && (
+        isAdmin() ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         classId in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.assignedClassIds)
+      );
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      function isValidUser(data) {
+        return hasOnlyAllowedFields(['uid', 'name', 'email', 'phone', 'role', 'status', 'assignedClassIds', 'studentId', 'joinedAt', 'tempPassword', 'permissions', 'impersonatedBy']) &&
+               hasRequiredFields(['name', 'email', 'role', 'status']) &&
+               data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+               isValidEmail(data.email) &&
+               data.role in ['admin', 'teacher', 'student'] &&
+               data.status in ['active', 'inactive'];
+      }
+
+      allow read: if isAuthenticated() && (
+        isOwner(userId) || 
+        isAdmin() || 
+        (isTeacher() && resource.data.role == 'teacher') ||
+        (isTeacher() && hasPermission('manageStudents') && resource.data.role == 'student') ||
+        (resource.data.role in ['teacher', 'admin'])
+      );
+      
+      allow create: if isAdmin() && isValidUser(request.resource.data);
+      
+      allow update: if (isAdmin() || isOwner(userId)) && isValidUser(request.resource.data) && (
+        isAdmin() || (
+          // Owner can only update limited fields
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'phone', 'tempPassword'])
+        )
+      );
+      
+      allow delete: if isAdmin();
+    }
+
+    match /students/{studentId} {
+      function isValidStudent(data) {
+        return hasOnlyAllowedFields(['id', 'name', 'phone', 'email', 'rollNumber', 'classId', 'subjectTeacherMap', 'status', 'joinedAt', 'uid', 'tempPassword']) &&
+               hasRequiredFields(['name', 'rollNumber', 'classId', 'status', 'joinedAt']) &&
+               data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+               data.rollNumber is string && data.rollNumber.size() < 50 &&
+               data.classId is string && data.classId.size() < 50 &&
+               data.status in ['active', 'left', 'completed'];
+      }
+
+      allow read: if isAuthenticated() && (
+        isOwner(studentId) || 
+        isAdmin() || 
+        (isTeacher() && (hasPermission('viewStudents') || isAssignedToClass(resource.data.classId))) ||
+        (isStudent() && resource.data.uid == request.auth.uid)
+      );
+      
+      allow create: if (isAdmin() || hasPermission('addStudents')) && isValidStudent(request.resource.data);
+      allow update: if (isAdmin() || hasPermission('editStudents')) && isValidStudent(request.resource.data);
+      allow delete: if isAdmin() || hasPermission('deleteStudents');
+    }
+
+    match /classes/{classId} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin() || hasPermission('manageClasses');
+      allow update: if isAdmin() || hasPermission('manageClasses') || hasPermission('manageOffDays');
+      allow delete: if isAdmin();
+    }
+
+    match /attendance/{attendanceId} {
+      allow read: if isAuthenticated() && (isAdmin() || isTeacher() || isStudent());
+      allow write: if isAdmin() || hasPermission('markTodayAttendance') || hasPermission('managePastAttendance');
+    }
+
+    match /attendance_records/{recordId} {
+      function isValidAttendanceRecord(data) {
+        return hasOnlyAllowedFields(['studentId', 'status', 'date', 'classId', 'subject']) &&
+               hasRequiredFields(['studentId', 'status', 'date', 'classId', 'subject']) &&
+               data.status in ['present', 'absent', 'leave'] &&
+               data.date is string && data.date.size() < 20 &&
+               data.classId is string && data.classId.size() < 50 &&
+               data.subject is string && data.subject.size() < 100;
+      }
+
+      allow read: if isAuthenticated() && (
+        isAdmin() || 
+        isTeacher() || 
+        (isStudent() && resource.data.studentId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.studentId)
+      );
+      allow write: if (isAdmin() || hasPermission('markTodayAttendance') || hasPermission('managePastAttendance')) && isValidAttendanceRecord(request.resource.data);
+    }
+
+    match /fees/{feeId} {
+      allow read: if isAuthenticated() && (
+        isAdmin() || 
+        hasPermission('manageFinance') || 
+        hasPermission('manageFees') ||
+        (isStudent() && resource.data.studentId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.studentId)
+      );
+      allow write: if isAdmin() || hasPermission('manageFinance') || hasPermission('manageFees');
+    }
+
+    match /expenses/{expenseId} {
+      allow read: if isAdmin() || hasPermission('manageFinance');
+      allow write: if isAdmin() || hasPermission('manageFinance');
+    }
+
+    match /timetable/{slotId} {
+      function isValidSlot(data) {
+        return hasOnlyAllowedFields(['classId', 'subject', 'teacherUid', 'day', 'startTime', 'endTime', 'room', 'type', 'updatedAt']) &&
+               hasRequiredFields(['classId', 'subject', 'day', 'startTime', 'endTime', 'type']) &&
+               data.day in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] &&
+               data.startTime is string && data.startTime.matches('^([01]\\d|2[0-3]):([0-5]\\d)$') &&
+               data.endTime is string && data.endTime.matches('^([01]\\d|2[0-3]):([0-5]\\d)$') &&
+               data.type in ['lecture', 'break'];
+      }
+
+      allow read: if isAuthenticated();
+      allow write: if (isAdmin() || hasPermission('manageTimetable')) && isValidSlot(request.resource.data);
+    }
+
+    match /audit_logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated();
+    }
+  }
+}
